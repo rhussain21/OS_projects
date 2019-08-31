@@ -27,7 +27,7 @@ int* randvals;
 int next_frame=0; // to be used by FCFS algo
 int hand = 0; // to be used by ClockPage and NRU algos
 string instructions;
-int MAX_FRAME_SIZE = 16;  // this can change to 16
+int MAX_FRAME_SIZE = 128;  // this can change to 16
 int counter = 0;
 int resetCtr = 0; 
 vector <int> time_last_used(MAX_FRAME_SIZE); //change this 
@@ -524,7 +524,7 @@ class WorkingSet: public PAGER {
 
 	FRAME* select_victim_frame() {
 
-		//cout << "select_victim_frame is called " <<endl; 
+		cout << "select_victim_frame is called " <<endl; 
 		FRAME* victim; 
 		int checkpid;
 		int checkvpage; 
@@ -577,7 +577,7 @@ class WorkingSet: public PAGER {
 						maxAge = current_age; 
 						victim = &frame_t[hand];
 						//cout << "Victim is set to current frame:  " << frame_t[hand].frameNum << endl << endl; 
-						//oldestTau = frame_t[hand].tau; 
+						oldestTau = frame_t[hand].tau; 
 					}
 					//cout << endl; 	
 					/*
@@ -1198,7 +1198,7 @@ int main(int argc, char** argv) {
 	char *optionsType = NULL; 
 	int c;
 	char in; 
-	 
+	
 	
 	while ((c = getopt (argc, argv, "a:o:f:")) !=  -1){
 		switch(c) {
@@ -1222,16 +1222,23 @@ int main(int argc, char** argv) {
 				}
 				else if (in == 'w') {
 					pager = new WorkingSet();
-					cout << "WorkingSet is set as the paging algorithm" << endl;
-					cout << "Check if paging is NULL (true/false) ";
+				}
+
+				break;
+				/*
+				else if (in == 'w') {
+					pager = new WorkingSet();
+				//	cout << "WorkingSet is set as the paging algorithm" << endl;
+					//cout << "Check if paging is NULL (true/false) "; 
+					/*
 					if (pager == NULL) {
 						cout << "True " << endl;
 					}
 					else  {
 						cout << "False " << endl;
-					}				
-				}
-				break;
+					}	  	
+				} 
+				break;  */
 			}
 			 
 			case 'o': {
@@ -1294,7 +1301,7 @@ int main(int argc, char** argv) {
 
 	createRandVals(rand_file);
 
-
+	//pager = new WorkingSet(); //082819 FOR TESTING PURPOSES.  DELETE LATER
 
 	Simulator();
 

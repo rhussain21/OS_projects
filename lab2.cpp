@@ -41,8 +41,12 @@ struct PROCESS {
 		int PRIO; //ASSIGNED LATER
 
 	//constructor 
-	PROCESS(int id) {
+	PROCESS(int id, int tempAT, int tempTC, int tempCB, int tempCB, int tempIO) {
 		pid = id;
+		AT = tempAT;
+		TC = tempTC;
+		CB = tempCB;
+		IO = tempIO;
 	}
 
 };
@@ -62,6 +66,102 @@ struct EVENT{
 
 vector <EVENT*> eventList; //consider making this a queue 
 
+/****************** PARSE INPUT DATA  ******************/
+
+string output;
+void parse_data (FILE* file) {
+
+	char* str2 = (char*)malloc(sizeof(char) * 200);
+	char* ret2;
+	//string output; 
+	
+	while(1) {
+		ret2 = fgets(str2, 200, file);
+		if (ret2 == NULL){
+			//cout << "REACHED END OF FILE" << endl;
+			break; 
+		}
+		else if (ret2[0] != '#') {
+			//cout << "TEST: THIS STRING DOES NOT HAVE A #" << endl;
+			output.append(ret2);
+		}
+	}
+
+/******************** CREATE PROCESSES ***********************/
+
+	stringstream buf(output);
+	string temp;
+	int i = 0;
+	int tempAT, tempCT, tempCB, tempIB;
+
+
+	PROCESS* prc ; //= new PROCESS(i, tempAT, tempCT, tempCB, tempIB);
+	while (1) {
+
+		getline(buf,temp,'\n');
+
+		stringstream buf2(temp);
+		buf2 >> tempAT >> tempCT >> tempCB >> tempIB;
+
+		
+		prc = new PROCESS(i, tempAT, tempCT, tempCB, tempIB);
+		prcList.push_back(prc);
+
+		i++;
+
+		//sloppy! Re-do this later
+		if(buf.rdbuf()->in_avail() == 0) {
+			break;
+		} 
+	}
+
+}
+
+
+
+
+/****************** PARSE RANDOM AND CREATE RANDOM VALUES ******************/
+
+void createRandVals(FILE* rand_file) {
+
+	char* str = (char*)malloc(sizeof(char) * 200); 
+	char *ret; 
+
+	ret = fgets(str, 200, rand_file);
+	randLimit = stoi(str);
+	//set first number to randLimit 
+	
+	randvals = new int[randLimit];
+
+	for(int i = 0; i < randLimit; i++){
+		ret = fgets(str, 200, rand_file);
+		randvals[i] = stoi(ret);
+	}
+}
+
+//create function for randomNumber
+int myrandom(int burst) { 
+
+	if (ofs > randLimit) {
+		//prevent out of bounds exception
+		ofs = 0; 
+
+	}
+
+	int output = (randvals[ofs] % burst)+1;  
+	ofs++;
+	
+	return output;	
+}
+
+
+/***************************************************************************************/
+/***************************************************************************************/
+/***** 100619 OLD CODE FROM 2018 STARTS BELOW.  STARTING OVER WITH NEW CODE ABOVE ******/
+/***************************************************************************************/
+/***************************************************************************************/
+
+
 /********  FUNCTION FOR CREATING SUMMARY TABLE			 **********/
 
 
@@ -76,6 +176,8 @@ vector <EVENT*> eventList; //consider making this a queue
 
 //need random number generator -- use what was given in class
 
+
+//   100619 - TESTING CODE.  COMMENTING ALL CODE BELOW TO TEST PARSING FUNCTION
 class DES_layer() {
 	get_event()
 } 

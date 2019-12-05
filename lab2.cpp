@@ -20,12 +20,15 @@ enum PREV_STATE {
 	READY = 1,
 	RUNNING = 2,
 	BLOCKED = 3,
-	PREEMPTION = 5
+	PREEMPTION = 4
 };
 
+int CURRENT_TIME = 0;
+int ofs;
+bool CALL_SCHEDULER = true;
 
 
-/********  PROCESS STRUCT **********/
+/********  DEFINE PROCESS STRUCT **********/
 
 struct PROCESS {
 
@@ -39,9 +42,11 @@ struct PROCESS {
 		int IT; //IT AVG I/O time
 		int CW; //CW AVT CPU wait time
 		int PRIO; //ASSIGNED LATER
-
+		int timeInPrevState;  
+		int timeRemaining; //might not need
+		int state_ts; // might not need
 	//constructor 
-	PROCESS(int id, int tempAT, int tempTC, int tempCB, int tempCB, int tempIO) {
+	PROCESS(int id, int tempAT, int tempTC, int tempCB,int tempIO) {
 		pid = id;
 		AT = tempAT;
 		TC = tempTC;
@@ -53,18 +58,30 @@ struct PROCESS {
 
 vector <PROCESS*> prcList; //consider making this a queue 
 
-/******** EVENT STRUCT **********/
+/******** DEFINE EVENT STRUCT **********/
 
 struct EVENT{
 		int pid; 
 		int time_stamp;
-		int transition;  
-		int prev_state;
-		PROCESS* evtPrc; 
+		int transition;  // new state
+		int prev_state; //time in previous state?
+		PROCESS* evtPrc;  // Is this needed?
+
+		//constructor
+
+	EVENT(int id, int ts, int newstate, int prevstate) {
+		pid = id;
+		time_stamp = ts;
+		transition = newstate;
+		prev_state = prevstate;
+		PROCESS* evtPrc;
+	}
 
 };	
 
 vector <EVENT*> eventList; //consider making this a queue 
+vector <EVENT*> runQueue; 
+
 
 /****************** PARSE INPUT DATA  ******************/
 
@@ -115,12 +132,21 @@ void parse_data (FILE* file) {
 		} 
 	}
 
+/******************** GENERATE "CREATED" EVENTS ***********************/
+	EVENT* newEvt; // =EVENT(int id, int ts, int newstate, int prevstate)
+	for (int i = 0; i < prcList.size(); i++) {
+
+		newEvt = new EVENT(prcList[i]->pid, prcList[i]->AT,0,0); 
+		eventList.push_back(newEvt);
+	}
+
 }
 
 
-
-
 /****************** PARSE RANDOM AND CREATE RANDOM VALUES ******************/
+
+int randLimit;
+int* randvals;
 
 void createRandVals(FILE* rand_file) {
 
@@ -154,102 +180,13 @@ int myrandom(int burst) {
 	return output;	
 }
 
+EVENT* get_event() {
 
-/***************************************************************************************/
-/***************************************************************************************/
-/***** 100619 OLD CODE FROM 2018 STARTS BELOW.  STARTING OVER WITH NEW CODE ABOVE ******/
-/***************************************************************************************/
-/***************************************************************************************/
-
-
-/********  FUNCTION FOR CREATING SUMMARY TABLE			 **********/
-
-
-
-/********  CREATE DATA STRUCTURE FOR PROCESSES		 **********/
-
-//declare variables
-
-// need event queue 
-// need process queue 
-// need ready queue this is part of the scheduler  
-
-//need random number generator -- use what was given in class
-
-
-//   100619 - TESTING CODE.  COMMENTING ALL CODE BELOW TO TEST PARSING FUNCTION
-class DES_layer() {
-	get_event()
-} 
-
-void Simulation() {
-	EVENT* evt;
-	while( (evt = get_event()) ) {
-	 	PROCESS *proc = evt->evtProcess; // this is the process the event works on
-		CURRENT_TIME = evt->evtTimeStamp;
-		evt->evtProcess->timeInPrevState = CURRENT_TIME – proc->state_ts;
-
-		switch(evt->transition) { // which state to transition to?
-		case TRANS_TO_READY:
-			// must come from BLOCKED or from PREEMPTION
-			// must add to run queue
-			CALL_SCHEDULER = true; // conditional on whether something is run
-			break;
-	 	case TRANS_TO_RUN:
-	 		// create event for either preemption or blocking
-			 break;
-	 	case TRANS_TO_BLOCK:
-		 	//create an event for when process becomes READY again
-			CALL_SCHEDULER = true;
-			break;
-	 	case TRANS_TO_PREEMPT:
-			 // add to runqueue (no event is generated)
-			CALL_SCHEDULER = true;
-			break;
-	 	}
-	 	//remove current event object from Memory
-	 	delete evt;
-		evt = nullptr;
-
-		if(CALL_SCHEDULER) {
-			if (get_next_event_time() == CURRENT_TIME) {
-		 	continue;//process next event from Event queue
-		 	}
-
-			CALL_SCHEDULER = false; // reset global flag
-			if (CURRENT_RUNNING_PROCESS == nullptr) {
-		 		CURRENT_RUNNING_PROCESS = THE_SCHEDULER->get_next_process();
-		 		if (CURRENT_RUNNING_PROCESS == nullptr)
-		 			continue;
-		 		// create event to make this process runnable for same time.
-			}
-		}
-	}
+	return eventList.front();
 }
 
 
-
-
-/*******************************  READ AND PARSE FILE ********************************************/
-//UPDATE 100619
-
-// to make sure the file was read 
-void read_line (FILE* file) {
-	char* str2 = (char*)malloc(sizeof(char) * 200);
-	char* ret2;
-	while(1) {
-		ret2 = fgets(str2, 200, file);
-		if (ret2 == NULL){
-			cout << "REACHED END OF FILE" << endl;
-			return;
-		}
-		cout << str2 << endl;
-	}
-}
-
-
-
-
+//FOR DEBUGGING PURPOSES -- DELETE LATER
 bool checkAlphaNumeric(string S) {
 	for (int i = 0; i < S.length(); i++) {
 		if(!isalnum(S[i])) {
@@ -260,158 +197,132 @@ bool checkAlphaNumeric(string S) {
 } 
 
 
-/** USE THIS TO TEST STORING DATA STREAM, PARSING, CONVERTING TO NUMBERS, AND USING TO CREATE PROCESSES **/
-void test_store_data (FILE* file) {
+/********************************  SIMULATOR ***************************************/ 
 
-	vector <string> inputs;
-	//string line = file;
+int cpuBurst, ioBurst ;
 
-	char* str = (char*)malloc(sizeof(char) * 200) ;
-	string example; 
-	char *ret; 
-	while(1) {
-		ret = fgets(str, 200, file);
-		if (ret == NULL){
-			//cout << "REACHED END OF FILE" << endl;
-			break;
-		}
-		example.append(ret);
-	}
+void Simulation() {
+ 	EVENT* evt;
+ 	EVENT* tempEvt;
+ 	while( (evt = get_event()) ) {
+			PROCESS *proc = evt->evtPrc; // this is the process the event works on
+			CURRENT_TIME = evt->time_stamp;
+			evt->evtPrc->timeInPrevState = CURRENT_TIME - (proc->state_ts);
 
-	stringstream parser(example); 
+			switch(evt->transition) { // which state to transition to?
+				case TRANS_TO_READY:
+				 	// must come from BLOCKED or from PREEMPTION
+					// must add to run queue
 
-	string token; 
-	/**** MY OLD WAY OF PARSING.  DELETE THIS 
-	while (getline(parser, token, ' ')) {
-		stringstream parser1(token); //delete this
-		while (getline(parser1, token, '\n')) {  //this is also unnecessary 
-				//check alphanumeric 
-				if (checkAlphaNumeric(token)) {
-					inputs.push_back(token);
-				}
-		}
-	} */
+					//if event CREATED -> READY, generate new event for run and add to run queue 
+					if (evt->prev_state == 0 ){
+						tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,0);
+						runQueue.push_back(tempEvt);
+					}	
+					else if (evt->prev_state == 3) {
+						tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,3);
+						runQueue.push_back(tempEvt);
+					}
+					else if (evt->prev_state == 4) {
+						//cpuBurst = myrandom(proc->CB);
+						tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,4);
+						runQueue.push_back(tempEvt);
+					}
 
-	while (getline(parser, token, ' ')) {
-		stringstream parser1(token); //delete this
-				for(string s; parser1 >> s; ) {
-        		inputs.push_back(s);
-    			}
-		
-	}
-
-	//print to see if it works
-	cout << "Size of stringstream: " << inputs.size() << endl;
-	for (int i = 0; i < inputs.size(); i++) {
-		
-		
-		//cout << inputs[i] << endl; 
-		
-		//inputs[i] = stoi(inputs[i]);
-	} 
-	/*
-	int pid = 0; 
-	for (int i = 0; i < inputs.size(); i++) {
-		if (inputs[i] != '\n') {
-
-		}
-	}  */
+					CALL_SCHEDULER = true; // conditional on whether something is run
+					break;
 
 
-	//cout << "The # of entries in this vector is: " << inputs.size() << endl; // delete this
-	//create vector of processes 
+				case TRANS_TO_RUN:
+				 	// create event for either preemption or blocking
+					//event for block
+					cpuBurst = myrandom(proc->CB);
+					tempEvt = new EVENT(proc->pid, CURRENT_TIME+cpuBurst,2,2);
+					eventList.push_back(tempEvt);
+				 	break;
 
-	/* TEST IF PROCESS WORKS 
-	PROCESS p1;
-	PROCESS p2;
-	p1.pid = 1;
-	p1.AT = stoi(inputs[0]);
-	p1.TC = stoi(inputs[1]);
-	p1.CB = stoi(inputs[2]);
-	p1.IO = 11105;
-	p1.PRIO = 0;
+				case TRANS_TO_BLOCK:
+					//create an event for when process becomes READY again
+					ioBurst = myrandom(proc->IO);
+					tempEvt = new EVENT(proc->pid, CURRENT_TIME+ioBurst,0,3);
+					eventList.push_back(tempEvt);
+					CALL_SCHEDULER = true;
+					break;
 
-		
-	cout << "Pid:  000"<<p1.pid<<":  "<<p1.AT<<"  "<<p1.TC<<"  "<<p1.CB<<"  "<<p1.IO<<"  "<<p1.PRIO<<endl; 
+				case TRANS_TO_PREEMPT:
+					// add to runqueue (no event is generated)
+					runQueue.push_back(evt);
+					CALL_SCHEDULER = true;
+					break;
+			}
 
-	p1.IO = stoi(inputs[3]);
-	cout << "Pid:  000"<<p1.pid<<":  "<<p1.AT<<"  "<<p1.TC<<"  "<<p1.CB<<"  "<<p1.IO<<"  "<<p1.PRIO<<endl; 
-	*/
- 
- 	/************** CREATE PROCESS QUEUE AND POPULATE ******************************/
 
-	//Create vector for each process in the input  i.e., process queue 
-	int maxSlots = inputs.size()/4;  
-	int numSlots = 0;
-	//vector <PROCESS> processQueue; 
-	PROCESS processQueue[maxSlots];
-	int pidCounter = 0;
-	
-	double tempPID, tempAT, tempTC, tempCB, tempIO; //might have to initialize these. run code and check later
-	for (int i = 1; i <= inputs.size(); i++) {
-		//cout << "initiate for loop" << endl; 
-		//cout << "TESTING:  i value is now" << i << " and i mod inputs.size() is" << (i % inputs.size())<< endl;
-		//assign PID and AT
-		if (i % 4 == 1) {
-			tempPID = pidCounter;
-			tempAT = stoi(inputs[i-1]);
-		}
-		//Assign TC
-		else if (i % 4 == 2) {
-			tempTC = stoi(inputs[i-1]);
-		} 
-		//Assign CB
-		else if (i % 4 == 3) {
-			tempCB = stoi(inputs[i-1]);
-		} 
-		//Assign IO
-		else if (i % 4 == 0) {
-			tempIO = stoi(inputs[i-1]);
-			processQueue[numSlots].pid = tempPID;
-			processQueue[numSlots].AT = tempAT;
-			processQueue[numSlots].TC = tempTC;
-			processQueue[numSlots].CB = tempCB; 
-			processQueue[numSlots].IO = tempIO; 
+			//remove current event object from Memory
+			delete evt;
+			evt = nullptr; //maybe delete tempEvt as well?
 
-			tempAT = tempTC = tempCB = tempIO = 0; 
+			/***********  120419 commented for debugging 
+			if(CALL_SCHEDULER) {
+				if (get_next_event_time() == CURRENT_TIME) {
+			 		continue;//process next event from Event queue
+				}	
 
-			//cout << "pid Counter is: " << pidCounter; 
-			//cout << "numSlots is: " << pidCounter; 
-			pidCounter++;
-			numSlots++; 
-		}
-		
-		//cout << "END OF LOOP # " << i << endl << endl;
-		//Use inputs to create process
-	}
-
-	//cout << "The # of entries in this vector is: " << inputs.size() << endl; 
-	//cout << "The # of inputs in this vector are: " << maxSlots << endl;
-
-	for (int i = 0; i < maxSlots; i++) {
-		cout << "Pid:  000"<<processQueue[i].pid<<":  "<<processQueue[i].AT<<"  "<<processQueue[i].TC<<"  "<<processQueue[i].CB<<"  "<<processQueue[i].IO<<endl;
-	}
-
-	//return inputs; // this doesnt work.  find a way to return vector or maybe cleanup here and return an array.  OR maybe just create processes from here. 
-	
-	/***************************** END PROCESS QUEUE HERE *******/
+				CALL_SCHEDULER = false; // reset global flag
+				if (CURRENT_RUNNING_PROCESS == nullptr) {
+			 		CURRENT_RUNNING_PROCESS = THE_SCHEDULER->get_next_process();
+			 		if (CURRENT_RUNNING_PROCESS == nullptr)
+			 			continue;
+			 		// create event to make this process runnable for same time.
+			 	}
+			}
+			**********/
+	 }
 }
- 
- 
-
-/******************************* START EVENT QUEUE HERE ******************************************/
-
-vector <EVENT> eventQueue; 
 
 
+/***************** DEBUGGING PURPOSES ONLY **************************/
 
-/*******************************   END EVENT QUEUE HERE ******************************************/
+// check contents of process list
+
+void printProcess(){
+	for (int i = 0; i < prcList.size(); i++) {
+
+		cout << "Pid: " << prcList[i]->pid << endl;
+		cout << "AT: " << prcList[i]->AT << endl;
+		cout << "TC: " << prcList[i]->TC << endl;
+		cout << "CB: " << prcList[i]->CB << endl;
+		cout << "IO: " << prcList[i]->IO << endl;
+
+		cout << endl;
+
+	}
+}
+
+void printEventList() {
+	for (int i = 0; i < eventList.size(); i++) { 
+		cout << "Event #: " << i << endl;
+		cout << "Event pid: " << eventList[i]->pid << endl;
+		cout << "Timestamp:  " << eventList[i]->time_stamp << endl;
+		cout << "Transition:  " << eventList[i]->transition << endl;
+		cout << endl;
+	}
+}
+
+void printRunQueue() {
+	for (int i = 0; i < runQueue.size(); i++) { 
+		cout << "Event #: " << i << endl;
+		cout << "Event pid: " << runQueue[i]->pid << endl;
+		cout << "Timestamp:  " << runQueue[i]->time_stamp << endl;
+		cout << "Transition:  " << runQueue[i]->transition << endl;
+		cout << endl;
+	}
+}
 
 /********************************  START MAIN PROGRAM HERE ***************************************/ 
 
 int main(int argc, char** argv) {
 
-	cout << "argv[1]: " << argv[1] << endl;
+	//cout << "argv[1]: " << argv[1] << endl;
 	
 	FILE *input_file = fopen(argv[1], "r");
 
@@ -419,10 +330,20 @@ int main(int argc, char** argv) {
 		cout << "Cannot read the file" << endl;
 	}
 
+	FILE *rand_file = fopen(argv[2], "r");
+	if (rand_file == NULL) {
+		cout << "Cannot read the random file" << endl; 
+	}
+
 	//cout << "This is the original text file: " << endl;
 	//read_line(input_file);
-	cout << "This is the re-arranged text file: " << endl;
-	test_store_data(input_file);
+	//cout << "This is the re-arranged text file: " << endl;
+	//test_store_data(input_file);
+	parse_data(input_file);
+	createRandVals(rand_file);
+	printProcess();
+	printEventList();
+	printRunQueue();
 	return 0;
 }
 

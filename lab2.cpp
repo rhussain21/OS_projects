@@ -43,8 +43,8 @@ struct PROCESS {
 		int IT; //IT AVG I/O time
 		int CW; //CW AVT CPU wait time
 		int PRIO; //ASSIGNED LATER
-		int timeInPrevState;  
-		int timeRemaining; //might not need
+		int timeInPrevState = 0;  
+		int timeRemaining; //  TC -  timeInPrevState
 		int state_ts; // might not need
 		bool completed = false;
 	//constructor 
@@ -54,6 +54,8 @@ struct PROCESS {
 		TC = tempTC;
 		CB = tempCB;
 		IO = tempIO;
+		timeRemaining = tempTC;
+
 	}
 
 };
@@ -141,10 +143,10 @@ void parse_data (FILE* file) {
 		newEvt = new EVENT(prcList[i]->pid, prcList[i]->AT,0,0, prcList[i]); 
 		eventList.push_back(newEvt);
 
-		cout << "TROUBLESHOOT: Confirm that event #" <<i << " has been created." << endl;
+		//cout << "TROUBLESHOOT: Confirm that event #" <<i << " has been created." << endl;
 	}
 
-	cout << "EvtList has " << eventList.size() << " elements. " << endl;
+	//cout << "EvtList has " << eventList.size() << " elements. " << endl;
 }
 
 
@@ -159,15 +161,26 @@ void createRandVals(FILE* rand_file) {
 	char *ret; 
 
 	ret = fgets(str, 200, rand_file);
-	randLimit = stoi(str);
+	randLimit = stoi(str) -2;
+
 	//set first number to randLimit 
 	
 	randvals = new int[randLimit];
+	
 
 	for(int i = 0; i < randLimit; i++){
+
 		ret = fgets(str, 200, rand_file);
-		randvals[i] = stoi(ret);
+		if (i != 0 && i != 1 ) {
+			//ret = fgets(str, 200, rand_file);
+			randvals[i-2] = stoi(ret); 
+		}
+		//cout << "i: " << i << " " <<randvals[i] << 
+		//cout << i << ": " << randvals[i]  << endl;
 	}
+
+	
+
 }
 
 //create function for randomNumber
@@ -179,7 +192,9 @@ int myrandom(int burst) {
 
 	}
 
+	//cout << "myrandom has been called. ofs is " << ofs << " burst is " << burst << " randval is " << randvals[ofs] ;
 	int output = (randvals[ofs] % burst)+1;  
+	//cout << " output: " << output << endl;
 	ofs++;
 	
 	return output;	
@@ -190,11 +205,11 @@ EVENT* get_event() {
 	int tempTime = 10000000;
 	int idx; 
 
-	cout << "Get_event has been called" << endl;
+	//cout << "Get_event has been called.  Total "<<eventList.size() << " elements." << endl;
 	for (int i = 0; i < eventList.size(); i++) {
-		cout << "iterating thru event list (total "<<eventList.size() << " elements) and now at position... " << i << endl;
-		cout << "This event timestamp is " << eventList[i]->time_stamp<< endl;
-
+		//cout << "iterating thru event list (total "<<eventList.size() << " elements) and now at position... " << i << endl;
+		//cout << "This event timestamp is " << eventList[i]->time_stamp<< endl;
+	//	cout << "@ event #" << i << ": Timestamp: "<< eventList[i]->time_stamp << " Transition: "<< eventList[i]->time_stamp <<endl;
 		rtnPointer = eventList[i]; 
 
 
@@ -202,25 +217,32 @@ EVENT* get_event() {
 
 			tempTime = rtnPointer->time_stamp ;
 			idx = i; 
+
+
 			//cout << "CURRENT_TIME is " << CURRENT_TIME << " and current event is being selected and deleted from list" << endl;
 		//	eventList.erase(eventList.begin()+i);
 		//	break; 
 		}
-		cout << "Get_event has selected event with position " << idx << " with timestamp " << tempTime << endl;
-		eventList.erase(eventList.begin()+idx);
+		
 	}
 
-	cout << "get_event is now complete" << endl;
+	rtnPointer = eventList[idx];
+	//cout << "Get_event has selected event with position " << idx << " with timestamp " << tempTime << endl;
+	eventList.erase(eventList.begin()+idx);
+
+	//cout << "get_event is now complete" << endl;
 	return rtnPointer;
 }
 
 
 int get_next_event_time() {
 
-	cout << "get next event time called" << endl;
+	//cout << "get next event time called" << endl;
 	int nextTime ;
 
 	nextTime = eventList.front()->time_stamp;
+
+
 
 	return nextTime;
 
@@ -251,7 +273,7 @@ class FCFS: public SCHEDULER {
 
 	//EDGE CASE: Potential fix for below algo.  The processes in input may have different arrival times.
 	//May have to arrange by arrival time.  Completed bit might not be okay to have
-	PROCESS* get_next_process() {
+	/*PROCESS* get_next_process() {
 		cout << "get next process is called" << endl;
 		PROCESS* newProc; 
 		for (int i = 0; i < prcList.size(); i++){
@@ -260,6 +282,17 @@ class FCFS: public SCHEDULER {
 				break;
 			}
 		}	
+		return newProc;
+	}
+ 	*/
+	PROCESS* get_next_process() {
+		
+		PROCESS* newProc; 
+
+		newProc = runQueue.front()->evtPrc;
+
+		runQueue.erase(runQueue.begin());
+		
 		return newProc;
 	}
 
@@ -277,22 +310,26 @@ void Simulation() {
  	EVENT* evt;
  	EVENT* tempEvt;
  	int simTimer = 0;  
+ 	int tempTrans ; 
+ 	string trans_output ; 
 
- 	cout << "EvtList has " << eventList.size() << " elements. " << endl;
+
+ 	//cout << "Starting simulator" <<endl;
+ //	cout << "EvtList has " << eventList.size() << " elements. " << endl;
 
  	while( (evt = get_event()) ) {
- 			cout << endl << "SIMULATION TIME: " << simTimer<< endl;
- 			if (simTimer > 50) {
+ 			//cout << "SIMULATION TIME: " << simTimer<< endl;
+ 			if (simTimer > 100 || CURRENT_TIME > 1000) {
  				break;
  			}
- 			cout << "EvtList has " << eventList.size() << " elements. " << endl;
+ 			//cout << "EvtList has " << eventList.size() << " elements. " << endl;
 
   		
 			PROCESS *proc = evt->evtPrc; // this is the process the event works on
-			cout << "Testing.  current process is :" << evt->evtPrc->pid << endl;
+			//cout << "Testing.  current process is :" << evt->evtPrc->pid << endl;
 			CURRENT_TIME = evt->time_stamp;
 
-			cout << "CURRENT_TIME is: " << CURRENT_TIME << endl;
+			//cout << "CURRENT_TIME is: " << CURRENT_TIME << endl;
 			evt->evtPrc->timeInPrevState = CURRENT_TIME - (proc->state_ts);
 
 			switch(evt->transition) { // which state to transition to?
@@ -302,28 +339,35 @@ void Simulation() {
 
 					//if event CREATED -> READY, generate new event for run and add to run queue 
 					if (evt->prev_state == 0 ){
-						cout << "trans to ready scenario 1" << endl ;
+						//cout << "trans to ready scenario 1" << endl ;
 						tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,0, proc);
 						eventList.push_back(tempEvt);
 						runQueue.push_back(tempEvt);
+						proc->state_ts = 0;
+						trans_output = "CREATED -> READY";
 					}	
 					else if (evt->prev_state == 3) {
-						cout << "trans to ready scenario 3" << endl ;
+						//cout << "trans to ready scenario 3" << endl ;
+
 						tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,3, proc);
 						eventList.push_back(tempEvt);
 						runQueue.push_back(tempEvt);
-					}
+						proc->timeInPrevState = proc->state_ts;
+						proc->state_ts = 0;
+						trans_output = "BLOCK -> READY";
+					}	
 					else if (evt->prev_state == 4) {
 						//cpuBurst = myrandom(proc->CB);
-						cout << "trans to ready scenario 4" << endl ;
+						//cout << "trans to ready scenario 4" << endl ;
 						tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,4, proc);
 						eventList.push_back(tempEvt);
 						runQueue.push_back(tempEvt);
+						proc->state_ts = 0;
 					}
 
 					CALL_SCHEDULER = true; // conditional on whether something is run
-
-					cout << "TRANS TO READY COMPLETE" << endl;
+					tempTrans = 0;
+					//cout << "TRANS TO READY COMPLETE" << endl;
 					break;
 
 
@@ -331,20 +375,42 @@ void Simulation() {
 				 	// create event for either preemption or blocking
 					//event for block
 					cpuBurst = myrandom(proc->CB);
+					if (cpuBurst > proc->timeRemaining) {
+						cpuBurst = proc->timeRemaining;
+
+					}
+					
 					tempEvt = new EVENT(proc->pid, CURRENT_TIME+cpuBurst,2,2, proc);
-					cout << "current time + cpu burst is " << CURRENT_TIME+cpuBurst << endl;
+					//cout << "current time + cpu burst is " << CURRENT_TIME+cpuBurst << endl;
 					eventList.push_back(tempEvt);
-					cout << "TRANS TO RUN COMPLETE" << endl;
+					proc->timeInPrevState = proc->state_ts;  // last burst time is now time in previous state
+					proc->timeRemaining = (proc->timeRemaining) - (proc->timeInPrevState);
+					proc->state_ts = cpuBurst; // new burst time
+
+
+					trans_output = "READY -> RUNNG"; 
+					tempTrans = 1; 
+					//cout << "TRANS TO RUN COMPLETE" << endl;
 				 	break;
 
 				case TRANS_TO_BLOCK:
 					//create an event for when process becomes READY again
 					ioBurst = myrandom(proc->IO);
+					if (ioBurst > proc->timeRemaining) {
+						ioBurst = proc->timeRemaining;
+					}
+
 					tempEvt = new EVENT(proc->pid, CURRENT_TIME+ioBurst,0,3, proc);
 					eventList.push_back(tempEvt);
 					CALL_SCHEDULER = true;
 
-					cout << "TRANS TO BLOCK COMPLETE" << endl;
+					proc->timeInPrevState = proc->state_ts;
+					proc->timeRemaining = (proc->timeRemaining) - (proc->timeInPrevState);
+					proc->state_ts = ioBurst;
+					trans_output =  "RUNNG -> BLOCK";
+					tempTrans = 2; 
+					//cout << "TRANS TO BLOCK COMPLETE" << endl;
+					//proc->nullptr;
 					break;
 
 				case TRANS_TO_PREEMPT:
@@ -352,10 +418,11 @@ void Simulation() {
 					runQueue.push_back(evt);
 					CALL_SCHEDULER = true;
 					cout << "TRANS TO PREEMPT COMPLETE" << endl;
+					tempTrans = 0; 
 					break;
 			}
 
-			cout << "Switching statement complete" << endl;
+			//cout << "Switching statement complete" << endl;
 
 
 			//remove current event object from Memory
@@ -365,7 +432,7 @@ void Simulation() {
 			
 			if(CALL_SCHEDULER) {
 
-				cout << "SCHEDULE HAS BEEN CALLED" << endl; 
+				//cout << "SCHEDULE HAS BEEN CALLED" << endl; 
 				if (get_next_event_time() == CURRENT_TIME) {
 			 		continue;//process next event from Event queue
 				}	
@@ -381,6 +448,18 @@ void Simulation() {
 
 			
 			simTimer++; //for debugging purposes ONLY
+			
+			//Consider having bottom before Scheduler is called, in case process is switched
+			cout << CURRENT_TIME << " " << proc->pid << " " <<proc->timeInPrevState<< ": "<< trans_output   ; //write code for time spent
+			if (tempTrans == 1) {
+				cout << " cb=" << cpuBurst << " rem="<< proc->timeRemaining << " prio=1" << endl;
+			}
+			else if (tempTrans == 2) {
+				cout << " ib=" << ioBurst << " rem="<< proc->timeRemaining << endl;
+			}
+			else {
+				cout << endl;
+			} 
 	 }
 
 	 

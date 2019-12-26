@@ -40,8 +40,8 @@ struct PROCESS {
 		int IO; //IO burst (IO) GIVEN
 		int FT; //finishing time (FT)
 		int TT ; //Turnaround time (TT)  FT-AT
-		int IT; //IT AVG I/O time
-		int CW; //CW AVT CPU wait time
+		int IT = 0; //IT AVG I/O time
+		int CW = 0; //CW AVT CPU wait time
 		int PRIO; //ASSIGNED LATER
 		int timeInPrevState = 0;  
 		int timeRemaining; //  TC -  timeInPrevState
@@ -298,19 +298,24 @@ EVENT* get_event() {
 int get_next_event_time() {
 
 	//cout << "get next event time called" << endl;
-	int nextTime ;
+	int nextTime = 2000000000;
 
-	if(eventList.empty()) 
+	if(eventList.empty()) { 
 		return -1;
-	else 
-
-		nextTime = eventList.front()->time_stamp;
-
-
-	return nextTime;
+	}
+	else {
+		//nextTime = eventList.front()->time_stamp;
+		for (int i = 0; i < eventList.size(); i++) {
+			if (nextTime > eventList[i]->time_stamp){
+				nextTime = eventList[i]->time_stamp;
+			}
+		}
+		return nextTime;
+		//nextTime = eventList.front()->time_stamp;
+	}
+	
 
 }
-
 
 bool checkRunningProcess(PROCESS* proc) {
 	for (int i = 0; i < prcList.size(); i++) {
@@ -418,6 +423,35 @@ class LCFS: public SCHEDULER {
 
 };
 
+
+class SRTF: public SCHEDULER { 
+
+ 
+	PROCESS* get_next_process() {
+		
+		PROCESS* newProc; 
+
+		int shortestTime = 1000000000;
+		int idx = 0;
+
+		for (int i = 0; i < runQueue.size(); i++) {
+
+			if (shortestTime > runQueue[i]->timeRemaining){
+				shortestTime = runQueue[i]->timeRemaining;
+				idx = i;
+			} 
+
+		}
+
+		newProc = runQueue[idx];
+		runQueue.erase(runQueue.begin()+idx);
+
+		
+		return newProc;
+	}
+
+
+};
 
 SCHEDULER *sched = NULL; 
 
@@ -530,7 +564,7 @@ void Simulation() {
 						proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
 						proc->state_ts = CURRENT_TIME;
 						trans_output = "BLOCK -> READY";
-						cout << "Process "<<proc->pid << " added to runQueue" << endl;
+						//cout << "Process "<<proc->pid << " added to runQueue" << endl;
 					}	
 					else if (evt->prev_state == 4) {
 						//cpuBurst = myrandom(proc->CB);
@@ -563,7 +597,7 @@ void Simulation() {
 
 					proc->timeInPrevState = CURRENT_TIME - proc->state_ts;  // last burst time is now time in previous state
 
-					proc->CW += proc->timeInPrevState;
+					proc->CW = (proc->CW) + proc->timeInPrevState;
 					tempTime = proc->timeRemaining;
 					proc->timeRemaining = (proc->timeRemaining) - cpuBurst; //change this calculation
 					proc->state_ts = CURRENT_TIME; // new burst time
@@ -603,7 +637,8 @@ void Simulation() {
 						//cout << "ioBurst: " <<ioBurst << endl;
 						
 
-						(proc->IT) += ioBurst;
+						proc->IT = (proc->IT) + ioBurst;
+						//cout << "IT at proc: "<< proc->pid <<" " << proc->IT << endl;
 						//(proc->ioCounter)++;
 
 						proc->state_ts = CURRENT_TIME;
@@ -663,10 +698,10 @@ void Simulation() {
 				CALL_SCHEDULER = false; // reset global flag
 			//	cout << "Checking process.  Current proc is: " << proc->pid << endl; 
 				if (!(checkRunningProcess(proc)) && !runQueue.empty()) {
-					cout << "Scheduler is checking for new process" << endl;
+					//cout << "Scheduler is checking for new process" << endl;
 			 		proc = sched->get_next_process();
 
-			 		cout << "Scheduler has picked PID #" << proc->pid << endl;
+			 	//	cout << "Scheduler has picked PID #" << proc->pid << endl;
 			 		tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,0, proc);
 					eventList.push_back(tempEvt);
 					proc->running = true;
@@ -736,7 +771,7 @@ int main(int argc, char** argv) {
 	if (rand_file == NULL) {
 		cout << "Cannot read the random file" << endl; 
 	}
-	sched = new LCFS();
+	sched = new SRTF();
 	//cout << "This is the original text file: " << endl;
 	//read_line(input_file);
 	//cout << "This is the re-arranged text file: " << endl;

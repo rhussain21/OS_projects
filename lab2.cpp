@@ -46,8 +46,12 @@ struct PROCESS {
 		int timeInPrevState = 0;  
 		int timeRemaining; //  TC -  timeInPrevState
 		int state_ts; // might not need
+		int currentBurst;
+
+		bool preempted = false;
 		bool running = false;
 		bool completed = false;
+
 
 	//constructor 
 	PROCESS(int id, int tempAT, int tempTC, int tempCB,int tempIO) {
@@ -453,6 +457,24 @@ class SRTF: public SCHEDULER {
 
 };
 
+
+class RR: public SCHEDULER { 
+
+ 
+	PROCESS* get_next_process() {
+
+		PROCESS* newProc; 
+
+		newProc = runQueue.front();
+
+		runQueue.erase(runQueue.begin());
+		
+		return newProc;
+	}
+
+
+};
+
 SCHEDULER *sched = NULL; 
 
 
@@ -507,6 +529,7 @@ void printEventList() {
 /********************************  SIMULATOR ***************************************/ 
 
 int cpuBurst, ioBurst ;
+int quantum = 10000; //this is provided via getOpt
 
 void Simulation() {
  	EVENT* evt;
@@ -552,6 +575,7 @@ void Simulation() {
 					//	cout << "Timestamp: " << CURRENT_TIME << endl;
 						proc->timeInPrevState = CURRENT_TIME - (proc->state_ts);
 						trans_output = "CREATED -> READY";
+						tempTrans = 0;
 					}	
 					else if (evt->prev_state == 3) {
 						//cout << "trans to ready scenario 3" << endl ;
@@ -564,19 +588,24 @@ void Simulation() {
 						proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
 						proc->state_ts = CURRENT_TIME;
 						trans_output = "BLOCK -> READY";
+						tempTrans = 0;
 						//cout << "Process "<<proc->pid << " added to runQueue" << endl;
-					}	
+					}	/*
 					else if (evt->prev_state == 4) {
 						//cpuBurst = myrandom(proc->CB);
 						//cout << "trans to ready scenario 4" << endl ;
 						//tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,4, proc);
 						//eventList.push_back(tempEvt);
+						cout << "trans to ready scenario 3" << endl;
 						runQueue.push_back(evt->evtPrc);
 						proc->state_ts = CURRENT_TIME;
-					}
+						tempTime = proc->timeRemaining;	
+						tempTrans = 1;
+						trans_output = "RUNNG -> READY";
+					} */
 
 					CALL_SCHEDULER = true; // conditional on whether something is run
-					tempTrans = 0;
+				
 					//cout << "TRANS TO READY COMPLETE" << endl;
 					break;
 
@@ -585,26 +614,64 @@ void Simulation() {
 				 	// create event for either preemption or blocking
 					//event for block
 
-				//	cout << "TRANS TO RUN CALLED" << endl;
+					//	cout << "TRANS TO RUN CALLED" << endl;
+
 					proc->running = true; 
-					cpuBurst = myrandom(proc->CB);
-					if (cpuBurst > proc->timeRemaining) {
-						cpuBurst = proc->timeRemaining;
-					}
 
-
-					//cout << "Proc: " << proc->pid << " Time Remaining: " << proc->timeRemaining << " Last state ts: " << proc->state_ts << endl;
-
-					proc->timeInPrevState = CURRENT_TIME - proc->state_ts;  // last burst time is now time in previous state
-
+					//proc->timeInPrevState = CURRENT_TIME - proc->state_ts;  // last burst time is now time in previous state
 					proc->CW = (proc->CW) + proc->timeInPrevState;
-					tempTime = proc->timeRemaining;
-					proc->timeRemaining = (proc->timeRemaining) - cpuBurst; //change this calculation
-					proc->state_ts = CURRENT_TIME; // new burst time
+
+
+
+					if (!proc->preempted) {   //calculate new cpu burst for processes that were previously blocked, not preempted
+						cpuBurst = myrandom(proc->CB);
+						proc->currentBurst = cpuBurst;
+
+						if (cpuBurst > proc->timeRemaining) {
+							cpuBurst = proc->timeRemaining;
+							proc->currentBurst = cpuBurst;
+						}	
+
+					}
+					else {
+						proc->currentBurst = (proc->currentBurst)-quantum;
+						if (proc->currentBurst > proc->timeRemaining) {
+							proc->currentBurst = proc->timeRemaining;
+							proc->preempted = false;
+						}
+
+					}
 					
-					tempEvt = new EVENT(proc->pid, CURRENT_TIME+cpuBurst,2,2, proc);
-					//cout << "current time + cpu burst is " << CURRENT_TIME+cpuBurst << endl;
-					eventList.push_back(tempEvt);
+					
+
+					if ( (proc->currentBurst <= quantum) ){  //proc->timeRemaining <= quantum
+
+						//cout << "Proc: " << proc->pid << " Time Remaining: " << proc->timeRemaining << " Last state ts: " << proc->state_ts << endl;
+						//cout << " Scenario 1 triggered.  Block, not preemptive" << endl;
+						tempTime = proc->timeRemaining;
+						proc->timeRemaining = (proc->timeRemaining) - (proc->currentBurst); //change this calculation
+						cout << "Temp time is " << tempTime << " & process time remaining is now " << proc->timeRemaining << endl;
+						proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
+						proc->state_ts = CURRENT_TIME; // new burst time
+						
+						tempEvt = new EVENT(proc->pid, CURRENT_TIME+(proc->currentBurst),2,2, proc);
+						//cout << "current time + cpu burst is " << CURRENT_TIME+cpuBurst << endl;
+						eventList.push_back(tempEvt);
+						proc->preempted = false;
+
+					}
+					else {
+						//cout << " Scenario 2 triggered.  Preemptive, not block" << endl;
+						tempTime = proc->timeRemaining;
+						proc->timeRemaining = (proc->timeRemaining) - quantum;
+						cout << "TEMP time is " << tempTime << " & process time remaining is now " << proc->timeRemaining << endl;
+						proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
+						proc->state_ts = CURRENT_TIME;
+
+						tempEvt = new EVENT(proc->pid, CURRENT_TIME+quantum,3,2, proc);
+						eventList.push_back(tempEvt);
+						proc->preempted = true; 
+					}
 			
 
 					trans_output = "READY -> RUNNG"; 
@@ -615,8 +682,9 @@ void Simulation() {
 				case TRANS_TO_BLOCK:
 					//create an event for when process becomes READY again
 					//cout << "TRANS TO BLOCK IS CALLED" << endl;
-					//cout << "Proc: " << proc->pid << " Time Remaining: " << proc->timeRemaining << " Last state ts: " << proc->state_ts << endl;
+					cout << "Proc: " << proc->pid << " Time Remaining: " << proc->timeRemaining << " Last state ts: " << proc->state_ts << endl;
 					proc->running = false;
+					//proc->timeRemaining = 
 					proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
 					//proc->timeRemaining = (proc->timeRemaining) - (proc->timeInPrevState);
 					
@@ -657,11 +725,17 @@ void Simulation() {
 					break;
 
 				case TRANS_TO_PREEMPT:
+					//cout << "Trans to Preempt" << endl;
 					// add to runqueue (no event is generated)
+					proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
+					proc->state_ts = CURRENT_TIME;
 					runQueue.push_back(evt->evtPrc);
+					proc->running = false;
 					CALL_SCHEDULER = true;
-					cout << "TRANS TO PREEMPT COMPLETE" << endl;
-					tempTrans = 0; 
+					//cout << "TRANS TO PREEMPT COMPLETE" << endl;
+					tempTime = proc->timeRemaining ;
+					trans_output = "RUNNG -> READY";
+					tempTrans = 1; 
 					break;
 			}
 
@@ -675,7 +749,7 @@ void Simulation() {
 			//Consider having bottom before Scheduler is called, in case process is switched
 			cout << CURRENT_TIME << " " << proc->pid << " " <<proc->timeInPrevState<< ": "<< trans_output   ; //write code for time spent
 			if (tempTrans == 1) {
-				cout << " cb=" << cpuBurst << " rem="<< tempTime << " prio="<<proc->PRIO << endl;
+				cout << " cb=" << proc->currentBurst << " rem="<< tempTime << " prio="<<proc->PRIO << endl;
 			}
 			else if (tempTrans == 2) {
 				cout << " ib=" << ioBurst << " rem="<< proc->timeRemaining << endl;
@@ -771,7 +845,8 @@ int main(int argc, char** argv) {
 	if (rand_file == NULL) {
 		cout << "Cannot read the random file" << endl; 
 	}
-	sched = new SRTF();
+	sched = new RR();
+	quantum = 5;
 	//cout << "This is the original text file: " << endl;
 	//read_line(input_file);
 	//cout << "This is the re-arranged text file: " << endl;

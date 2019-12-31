@@ -653,7 +653,7 @@ void Simulation() {
 						IOutilization = IOutilization + (CURRENT_TIME-prevTime);
 					}		
 
-					if (evt->prev_state == 0 ){
+					if (evt->prev_state == 0 ){ //from created
 
 						runQueue.push_back(evt->evtPrc);
 
@@ -662,7 +662,7 @@ void Simulation() {
 						trans_output = "CREATED -> READY";
 						tempTrans = 0;
 					}	
-					else if (evt->prev_state == 3) {
+					else if (evt->prev_state == 3) {  //from blocked
 						runQueue.push_back(evt->evtPrc);
 
 						proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
@@ -671,6 +671,35 @@ void Simulation() {
 						tempTrans = 0;
 						
 					}	
+
+					else if (evt->prev_state == 2) { // from running
+						
+							proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
+							proc->state_ts = CURRENT_TIME;
+							proc->currentBurst = (proc->currentBurst)-quantum;
+							//printCPUbursts();
+							tempPRIO = evt->evtPrc->dynamicPRIO;
+							evt->evtPrc->dynamicPRIO --;  
+							//cout << "dynamicPRIO has ben decremented " << endl;
+							if (evt->evtPrc->dynamicPRIO == -1 && prio_flag) {
+								//cout << "prio below -1" << endl;
+								evt->evtPrc->dynamicPRIO = evt->evtPrc->staticPRIO; 
+								
+								expiredQueue.push_back(evt->evtPrc);
+								
+							}
+							else {
+				
+								runQueue.push_back(evt->evtPrc);
+							}
+
+						
+
+							proc->running = false;
+							tempTime = proc->timeRemaining ;
+							trans_output = "RUNNG -> READY";
+							tempTrans = 1; 
+					}
 
 					proc->blocked = false;
 					CALL_SCHEDULER = true; // conditional on whether something is run
@@ -739,7 +768,7 @@ void Simulation() {
 						proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
 						proc->state_ts = CURRENT_TIME;
 
-						tempEvt = new EVENT(proc->pid, CURRENT_TIME+quantum,3,2, proc);
+						tempEvt = new EVENT(proc->pid, CURRENT_TIME+quantum,0,2, proc);
 						eventList.push_back(tempEvt);
 						proc->preempted = true; 
 					}
@@ -801,7 +830,7 @@ void Simulation() {
 				case TRANS_TO_PREEMPT:
 					// add to runqueue (no event is generated)
 					//cout << "preemption is occurring " << endl;
-
+					/*
 					if(checkRunningProcess()) {
 						CPUutilization = CPUutilization + (CURRENT_TIME-prevTime);
 						//cout << "Processes are running: " << CPUutilization << endl;
@@ -827,23 +856,18 @@ void Simulation() {
 						
 					}
 					else {
-					//	cout <<"pushed to runqeue" << endl;
+		
 						runQueue.push_back(evt->evtPrc);
 					}
 
-					/*
-					if(proc->currentBurst <= quantum) {
-						proc->preempted = false;
-					}*/
-					
-			
+				
 
 					proc->running = false;
 					proc->blocked = false;
 					CALL_SCHEDULER = true;
 					tempTime = proc->timeRemaining ;
 					trans_output = "RUNNG -> READY";
-					tempTrans = 1; 
+					tempTrans = 1; */
 					break;
 			}
 

@@ -4,6 +4,8 @@
 #include <sstream>
 #include <vector>
 #include <queue>
+#include <getopt.h> 
+#include <unistd.h> 
 
 using namespace std; 
 
@@ -37,7 +39,7 @@ double avgThruput = 0;
 
 bool CALL_SCHEDULER = true;
 bool prio_flag = false; 
-string schedName = "FCFS" ;
+string schedName = "" ;
 
 
 
@@ -340,6 +342,7 @@ int get_next_event_time() {
 
 bool checkRunningProcess() {
 	for (int i = 0; i < prcList.size(); i++) {
+		//cout << "Process #" << i << ": " << prcList[i]->running << endl;
 		if (prcList[i]->running == true) {
 			return true;
 		}
@@ -490,7 +493,6 @@ class RR: public SCHEDULER {
 	PROCESS* get_next_process() {
 
 		PROCESS* newProc; 
-		cout <<"Initiating RR" << endl;
  
 		newProc = runQueue.front();
 
@@ -580,7 +582,7 @@ void printSummary(){
 	avgTT = avgTT/(prcList.size());
 	avgCW = avgCW/(prcList.size());
 	//cout << "total CPU: " << totalCPU << endl;
-	avgThruput = totalCPU/ (double)CURRENT_TIME ; 
+	avgThruput = ((prcList.size())/ (double)CURRENT_TIME)*100 ; 
 	CPUutilization = (CPUutilization / (double)CURRENT_TIME) * 100;  
 	IOutilization = (IOutilization / (double)CURRENT_TIME) * 100;  
 	//cout << " total CPU is " << totalCPU << " and current time is " << CURRENT_TIME << " and avg thruput is " << avgThruput << endl;
@@ -613,6 +615,7 @@ void Simulation() {
  	int tempTrans ; 
  	int tempTime; 
  	int tempPRIO;
+ 	int prevTime; 
  	string trans_output ; 
 
 
@@ -625,9 +628,10 @@ void Simulation() {
  		
  			//cout << "EvtList has " << eventList.size() << " elements. " << endl;
 
-  		
+  			
 			PROCESS *proc = evt->evtPrc; // this is the process the event works on
 			//cout << "Testing.  current process is :" << evt->evtPrc->pid << endl;
+			prevTime = CURRENT_TIME;
 			CURRENT_TIME = evt->time_stamp;
 		//	cout << "CURRENT_TIME: " << CURRENT_TIME << endl;
 			//cout << "CURRENT_TIME is: " << CURRENT_TIME << endl;
@@ -637,6 +641,17 @@ void Simulation() {
 				case TRANS_TO_READY:
 				 	// must come from BLOCKED or from PREEMPTION
 					// must add to run queue
+
+
+					if(checkRunningProcess()) {
+						CPUutilization = CPUutilization + (CURRENT_TIME-prevTime);
+
+						//cout << "Processes are running: " << CPUutilization << endl;
+					}	
+
+					if(checkBlockedProcess()) {
+						IOutilization = IOutilization + (CURRENT_TIME-prevTime);
+					}		
 
 					if (evt->prev_state == 0 ){
 
@@ -657,12 +672,7 @@ void Simulation() {
 						
 					}	
 
-					if (checkRunningProcess){
-						CPUutilization = CPUutilization + proc->timeInPrevState; 
-					}
-					if (checkBlockedProcess){
-						IOutilization = IOutilization + proc->timeInPrevState; 
-					}
+					proc->blocked = false;
 					CALL_SCHEDULER = true; // conditional on whether something is run
 				
 					break;
@@ -671,6 +681,15 @@ void Simulation() {
 				case TRANS_TO_RUN:
 				 	// create event for either preemption or blocking
 					//event for block
+
+					if(checkRunningProcess()) {
+						CPUutilization = CPUutilization + (CURRENT_TIME-prevTime);
+						//cout << "Processes are running: " << CPUutilization << endl;
+					}	
+
+					if(checkBlockedProcess()) {
+						IOutilization = IOutilization + (CURRENT_TIME-prevTime);
+					}
 
 					proc->running = true; 
 					proc->blocked = false;  
@@ -725,12 +744,7 @@ void Simulation() {
 						proc->preempted = true; 
 					}
 					
-					if (checkRunningProcess){
-						CPUutilization = CPUutilization + proc->timeInPrevState; 
-					}
-					if (checkBlockedProcess){
-						IOutilization = IOutilization + proc->timeInPrevState; 
-					}
+		
 
 					trans_output = "READY -> RUNNG"; 
 					tempTrans = 1;
@@ -740,6 +754,17 @@ void Simulation() {
 				case TRANS_TO_BLOCK:
 					//create an event for when process becomes READY again
 					//cout << "Proc: " << proc->pid << " Time Remaining: " << proc->timeRemaining << " Last state ts: " << proc->state_ts << endl;
+					
+					if(checkRunningProcess()) {
+						CPUutilization = CPUutilization + (CURRENT_TIME-prevTime);
+						//cout << "Processes are running: " << CPUutilization << endl;
+
+					}	
+
+					if(checkBlockedProcess()) {
+						IOutilization = IOutilization + (CURRENT_TIME-prevTime);
+					}
+
 					proc->running = false;
 					proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
 					
@@ -769,18 +794,24 @@ void Simulation() {
 						tempTrans = 2; 
 					}
 
-					if (checkRunningProcess){
-						CPUutilization = CPUutilization + proc->timeInPrevState; 
-					}
-					if (checkBlockedProcess){
-						IOutilization = IOutilization + proc->timeInPrevState; 
-					}
+			
 
 					break;
 
 				case TRANS_TO_PREEMPT:
 					// add to runqueue (no event is generated)
 					//cout << "preemption is occurring " << endl;
+
+					if(checkRunningProcess()) {
+						CPUutilization = CPUutilization + (CURRENT_TIME-prevTime);
+						//cout << "Processes are running: " << CPUutilization << endl;
+
+					}	
+
+					if(checkBlockedProcess()) {
+						IOutilization = IOutilization + (CURRENT_TIME-prevTime);
+					}
+
 					proc->timeInPrevState = CURRENT_TIME - proc->state_ts;
 					proc->state_ts = CURRENT_TIME;
 					proc->currentBurst = (proc->currentBurst)-quantum;
@@ -805,14 +836,10 @@ void Simulation() {
 						proc->preempted = false;
 					}*/
 					
-					if (checkRunningProcess){
-						CPUutilization = CPUutilization + proc->timeInPrevState; 
-					}
-					if (checkBlockedProcess){
-						IOutilization = IOutilization + proc->timeInPrevState; 
-					}
+			
 
 					proc->running = false;
+					proc->blocked = false;
 					CALL_SCHEDULER = true;
 					tempTime = proc->timeRemaining ;
 					trans_output = "RUNNG -> READY";
@@ -868,7 +895,7 @@ void Simulation() {
 
 				 		tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,0, proc);
 						eventList.push_back(tempEvt);
-						proc->running = true;
+						//proc->running = true;
 					}
 
 			 		if (proc == nullptr)
@@ -924,33 +951,119 @@ void printRunQueue() {
 int main(int argc, char** argv) {
 
 	//cout << "argv[1]: " << argv[1] << endl;
-	
-	FILE *input_file = fopen(argv[1], "r");
 
+	extern char* optarg; 
+	char *algoType = NULL;
+	int c;
+	char in;
+	char in2;   
+	int k =1;
+	string getQuantum = "";
+
+	bool v_flag = false; //verbose output
+
+	while ((c = getopt (argc, argv, "vs:")) != -1) { 
+		switch(c) {
+			case 's': {
+				algoType = optarg;
+				in = algoType[0];
+
+				/*
+				while(meow != '\0') {
+					meow = algoType[k+1] ; 
+					testing = testing + meow; 
+					cout << "optarg #" << k << ": " << meow << endl;
+					cout << "algoType is " << algoType << endl;
+					cout << "Testing: " << testing << endl;
+
+					k++;		
+					cout << stoi(testing)+1 << endl;
+				} */
+
+		
+
+				if (in == 'F') {
+					sched = new FCFS();
+					schedName = "FCFS";
+				}
+				else if (in == 'L') {
+					sched = new LCFS();
+					schedName = "LCFS";
+				}
+				else if (in == 'S') {
+					sched = new SRTF();
+					schedName = "SRTF";
+				}
+				else if (in == 'R') {
+					sched = new RR();
+					in2 = algoType[k];
+					while(in2 != '\0') {
+						getQuantum = getQuantum + in2;
+						k++;
+						in2 = algoType[k];
+					}
+					quantum = stoi(getQuantum);
+					schedName = "RR "+to_string(quantum);
+				}
+				else if (in == 'P') {
+					sched = new PRIO();
+					in2 = algoType[k];
+					while(in2 != '\0') {
+						getQuantum = getQuantum + in2;
+						k++;
+						in2 = algoType[k];
+					}
+					quantum = stoi(getQuantum);
+					schedName = "PRIO "+to_string(quantum);
+					prio_flag = true;
+				}
+				else {
+					//sched = new FLOOK();  
+				}
+				break;
+			}
+			case 'v': {
+				v_flag = true;
+				break;
+			}
+			case '?': {
+				if (optopt == 's'){
+					cerr<< "Option requires an argument" << endl;
+				}
+				else if (isprint(optopt)) {
+					cerr << "Unknown option! " << endl ; 
+				}
+				else {
+					cerr << "Unknown option character! " << endl;
+				}
+				return 1; 
+			}
+			default:
+				abort();
+		}
+
+	}
+	
+	FILE *input_file = fopen(argv[optind], "r");
 	if (input_file == NULL) {
 		cout << "Cannot read the file" << endl;
 	}
 
-	FILE *rand_file = fopen(argv[2], "r");
+	optind++ ; 
+
+	FILE *rand_file = fopen(argv[optind], "r");
 	if (rand_file == NULL) {
 		cout << "Cannot read the random file" << endl; 
 	}
-	sched = new FCFS();
-	//quantum = 5;
-	//cout << "This is the original text file: " << endl;
-	//read_line(input_file);
-	//cout << "This is the re-arranged text file: " << endl;
-	//test_store_data(input_file);
+
 	parse_data(input_file);
 	createRandVals(rand_file);
 	addPRIO();
-	prio_flag = false;
-	//printProcess();
-	//printEventList();
+
 	Simulation();
 	printSummary();
 	
-	//printRunQueue();
+
 	return 0;
 }
 

@@ -27,9 +27,18 @@ enum PREV_STATE {
 int CURRENT_TIME = 0;
 int ofs;
 int quantum = 10000; //this is provided via getOpt
+int totalCPU = 0;
+
+double CPUutilization = 0; 
+double IOutilization = 0; 
+double avgTT = 0;
+double avgCW = 0;
+double avgThruput = 0;
+
 bool CALL_SCHEDULER = true;
 bool prio_flag = false; 
 string schedName = "FCFS" ;
+
 
 
 /********  DEFINE PROCESS STRUCT **********/
@@ -54,6 +63,7 @@ struct PROCESS {
 
 		bool preempted = false;
 		bool running = false;
+		bool blocked = false; 
 		bool completed = false;
 
 
@@ -328,7 +338,7 @@ int get_next_event_time() {
 
 }
 
-bool checkRunningProcess(PROCESS* proc) {
+bool checkRunningProcess() {
 	for (int i = 0; i < prcList.size(); i++) {
 		if (prcList[i]->running == true) {
 			return true;
@@ -338,6 +348,15 @@ bool checkRunningProcess(PROCESS* proc) {
 	return false;
 }
 
+bool checkBlockedProcess() {
+	for (int i = 0; i < prcList.size(); i++) {
+		if (prcList[i]->blocked == true) {
+			return true;
+		}
+
+	}
+	return false;
+}
 
 //********************* FOR DEBUGGING PURPOSES ***********************//
 bool checkAlphaNumeric(string S) {
@@ -530,6 +549,15 @@ SCHEDULER *sched = NULL;
 
 void printSummary(){
 
+	/*
+	Summary Information - Finally print a summary for the simulation:
+	Finishing time of the last event (i.e. the last process finished execution)
+	CPU utilization (i.e. percentage (0.0 – 100.0) of time at least one process is running
+	IO utilization (i.e. percentage (0.0 – 100.0) of time at least one process is performing IO
+	Average turnaround time among processes
+	Average cpu waiting time among processes
+	Throughput of number processes per 100 time units 
+	*/
 
 	cout << schedName << endl;
 
@@ -537,12 +565,27 @@ void printSummary(){
 	for (int i = 0; i < prcList.size(); i++) {
 		// pid: AT TC CB IO PRIO | FT TT IT CW
 
-	
+		avgTT = avgTT+ (prcList[i]->TT);
+		avgCW = avgCW + (prcList[i]->CW);
 
+		/*
 		cout << prcList[i]->pid <<":    " << prcList[i]->AT << "   "<< prcList[i]->TC << "   "<< prcList[i]->CB << "   "<< prcList[i]->IO << "   "<< (prcList[i]->staticPRIO)+1;
 		cout << "   |   " << prcList[i]->FT << "   "<< prcList[i]->TT << "   "<< prcList[i]->IT << "   "<< prcList[i]->CW << endl;
+		*/
+
+		printf("%04d: %4d %4d %4d %4d %1d | %5d %5d %5d %5d\n", prcList[i]->pid, prcList[i]->AT, prcList[i]->TC, prcList[i]->CB, prcList[i]->IO, (prcList[i]->staticPRIO)+1, prcList[i]->FT, prcList[i]->TT, prcList[i]->IT, prcList[i]->CW);
+
 	}
 
+	avgTT = avgTT/(prcList.size());
+	avgCW = avgCW/(prcList.size());
+	//cout << "total CPU: " << totalCPU << endl;
+	avgThruput = totalCPU/ (double)CURRENT_TIME ; 
+	CPUutilization = (CPUutilization / (double)CURRENT_TIME) * 100;  
+	IOutilization = (IOutilization / (double)CURRENT_TIME) * 100;  
+	//cout << " total CPU is " << totalCPU << " and current time is " << CURRENT_TIME << " and avg thruput is " << avgThruput << endl;
+
+	printf("SUM: %d %.2lf %.2lf %.2lf %.2lf %.3lf\n", CURRENT_TIME, CPUutilization, IOutilization, avgTT, avgCW, avgThruput);  
 
 }
 
@@ -614,6 +657,12 @@ void Simulation() {
 						
 					}	
 
+					if (checkRunningProcess){
+						CPUutilization = CPUutilization + proc->timeInPrevState; 
+					}
+					if (checkBlockedProcess){
+						IOutilization = IOutilization + proc->timeInPrevState; 
+					}
 					CALL_SCHEDULER = true; // conditional on whether something is run
 				
 					break;
@@ -624,6 +673,7 @@ void Simulation() {
 					//event for block
 
 					proc->running = true; 
+					proc->blocked = false;  
 
 					proc->CW = (proc->CW) + proc->timeInPrevState;
 
@@ -632,6 +682,7 @@ void Simulation() {
 					if (!proc->preempted) {   //calculate new cpu burst for processes that were previously blocked, not preempted
 						cpuBurst = myrandom(proc->CB);
 						proc->currentBurst = cpuBurst;
+						
 
 						if (cpuBurst > proc->timeRemaining) {
 							cpuBurst = proc->timeRemaining;
@@ -673,7 +724,13 @@ void Simulation() {
 						eventList.push_back(tempEvt);
 						proc->preempted = true; 
 					}
-			
+					
+					if (checkRunningProcess){
+						CPUutilization = CPUutilization + proc->timeInPrevState; 
+					}
+					if (checkBlockedProcess){
+						IOutilization = IOutilization + proc->timeInPrevState; 
+					}
 
 					trans_output = "READY -> RUNNG"; 
 					tempTrans = 1;
@@ -689,6 +746,7 @@ void Simulation() {
 
 					if (proc->timeRemaining == 0) {
 						proc->completed = true; 
+						proc->blocked = false; 
 						trans_output =  "Done";
 						proc->FT = CURRENT_TIME;
 						proc->TT = (proc->FT) - (proc->AT);
@@ -704,12 +762,19 @@ void Simulation() {
 						eventList.push_back(tempEvt);
 						proc->dynamicPRIO = proc->staticPRIO; //reset priority
 						proc->running = false;
+						proc->blocked = true; 
 						CALL_SCHEDULER = true;
 
 						trans_output =  "RUNNG -> BLOCK";
 						tempTrans = 2; 
 					}
 
+					if (checkRunningProcess){
+						CPUutilization = CPUutilization + proc->timeInPrevState; 
+					}
+					if (checkBlockedProcess){
+						IOutilization = IOutilization + proc->timeInPrevState; 
+					}
 
 					break;
 
@@ -740,6 +805,13 @@ void Simulation() {
 						proc->preempted = false;
 					}*/
 					
+					if (checkRunningProcess){
+						CPUutilization = CPUutilization + proc->timeInPrevState; 
+					}
+					if (checkBlockedProcess){
+						IOutilization = IOutilization + proc->timeInPrevState; 
+					}
+
 					proc->running = false;
 					CALL_SCHEDULER = true;
 					tempTime = proc->timeRemaining ;
@@ -756,7 +828,11 @@ void Simulation() {
 			evt = nullptr; //maybe delete tempEvt as well?
 			//Consider having bottom before Scheduler is called, in case process is switched
 
-
+			if (tempTrans == 1) {
+				totalCPU = totalCPU + (proc->currentBurst);
+				//cout << " Current burst is: " << proc->currentBurst << " and total CPU is " << totalCPU << endl;
+			} 
+			//cout << " Current burst is: " << proc->currentBurst << " and total CPU is " << totalCPU << endl;
 
 			cout << CURRENT_TIME << " " << proc->pid << " " <<proc->timeInPrevState<< ": "<< trans_output   ; //write code for time spent
 			if (tempTrans == 1 && prio_flag) {
@@ -776,7 +852,7 @@ void Simulation() {
 
 
 			if(CALL_SCHEDULER) {
-				cout << "Scheduler called" << endl;
+				//cout << "Scheduler called" << endl;
 
 				if (get_next_event_time() == CURRENT_TIME) { 
 			 		continue;//process next event from Event queue
@@ -784,10 +860,10 @@ void Simulation() {
 
 				CALL_SCHEDULER = false; // reset global flag
 			
-				if (!(checkRunningProcess(proc)) ) {
+				if (!(checkRunningProcess()) ) {
 
 					if (!runQueue.empty() || !expiredQueue.empty()) {
-						cout <<"IF loop condition met" << endl;
+						//cout <<"IF loop condition met" << endl;
 				 		proc = sched->get_next_process();
 
 				 		tempEvt = new EVENT(proc->pid, CURRENT_TIME, 1,0, proc);
@@ -859,8 +935,8 @@ int main(int argc, char** argv) {
 	if (rand_file == NULL) {
 		cout << "Cannot read the random file" << endl; 
 	}
-	sched = new RR();
-	quantum = 5;
+	sched = new FCFS();
+	//quantum = 5;
 	//cout << "This is the original text file: " << endl;
 	//read_line(input_file);
 	//cout << "This is the re-arranged text file: " << endl;

@@ -28,7 +28,7 @@ enum PREV_STATE {
 
 int CURRENT_TIME = 0;
 int ofs;
-int quantum = 10000; //this is provided via getOpt
+int quantum = 10000; //this is provided via getOpt. high number set so it wont affect FCFS, LCFS, SRTF algos
 int totalCPU = 0;
 
 double CPUutilization = 0; 
@@ -38,7 +38,10 @@ double avgCW = 0;
 double avgThruput = 0;
 
 bool CALL_SCHEDULER = true;
-bool prio_flag = false; 
+bool prio_flag = false;  // to use active and expired queues
+bool preprio = false;  // to enable preemption
+bool attemptPrio = false;
+bool v_flag = false; //verbose output
 string schedName = "" ;
 
 
@@ -546,6 +549,88 @@ class PRIO: public SCHEDULER {
 
 };
 
+class PREPRIO: public SCHEDULER {
+	PROCESS* get_next_process() {
+
+		PROCESS* newProc; 
+		int tempPRIO = -1; 
+		int idx; 
+
+
+		if (runQueue.empty()) {
+			tempQueue = expiredQueue ;
+			expiredQueue = runQueue;
+			runQueue = tempQueue;
+
+		}
+		
+		for (int i = 0; i < runQueue.size(); i++) {
+			//cout << "At idx " << i << " the dynamicPRIO is " << (runQueue[i]->dynamicPRIO) << " and staticPRIO is " << (runQueue[i]->staticPRIO) << endl;
+			if (runQueue[i]->dynamicPRIO > tempPRIO) {
+				idx = i; 
+				tempPRIO = runQueue[i]->dynamicPRIO;
+				
+			}
+			
+			//cout << "runQueue.begin()+idx: " << runQueue[runQueue.begin()+idx]->pid << endl;
+			//cout << "idx chosen: " << idx << endl;
+			
+
+		}
+
+		newProc = runQueue[idx];
+		
+		runQueue.erase(runQueue.begin()+idx);
+
+		return newProc;
+	}
+
+
+
+
+};
+
+
+bool comparePRIO(PROCESS* prc) {
+
+	int readyPrio = prc->dynamicPRIO; 
+	int readyPID = prc->pid;
+	int runningPrio;
+	int ts ;//= (prc->state_ts)+quantum;
+
+	int runningPID;
+
+	for (int i = 0; i < prcList.size(); i++){
+		if (prcList[i]->running) {
+			runningPrio = prcList[i]->dynamicPRIO; 
+			runningPID = prcList[i]->pid;
+			ts =  (prcList[i]->state_ts)+ min(quantum,prcList[i]->currentBurst);
+			break;
+		}
+	}
+
+	//cout << "readyPrio is " << readyPrio << " and running Prio is "<< runningPrio << endl;
+
+	if (readyPrio <= runningPrio) {  //does it have to be higher?  double-check
+		if (v_flag) {
+			if (ts == CURRENT_TIME) {
+				printf("---> PRIO preemption %d by %d ? 1 TS=%d now=%d) --> NO\n", runningPID, readyPID,CURRENT_TIME,CURRENT_TIME);
+			}
+			else{
+				printf("---> PRIO preemption %d by %d ? 0 TS=%d now=%d) --> NO\n", runningPID, readyPID,ts,CURRENT_TIME);
+			}
+		}
+
+		return false;
+	}
+	else {  //start preemption
+		if (v_flag)
+			printf("---> PRIO preemption %d by %d ? 1 TS=%d now=%d) --> YES\n", runningPID, readyPID,ts,CURRENT_TIME);
+		return true;
+	}
+
+}
+
 SCHEDULER *sched = NULL; 
 
 
@@ -669,6 +754,7 @@ void Simulation() {
 						proc->state_ts = CURRENT_TIME;
 						trans_output = "BLOCK -> READY";
 						tempTrans = 0;
+						attemptPrio = true;
 						
 					}	
 
@@ -830,7 +916,6 @@ void Simulation() {
 				case TRANS_TO_PREEMPT:
 					// add to runqueue (no event is generated)
 					//cout << "preemption is occurring " << endl;
-					/*
 					if(checkRunningProcess()) {
 						CPUutilization = CPUutilization + (CURRENT_TIME-prevTime);
 						//cout << "Processes are running: " << CPUutilization << endl;
@@ -856,18 +941,24 @@ void Simulation() {
 						
 					}
 					else {
-		
+					//	cout <<"pushed to runqeue" << endl;
 						runQueue.push_back(evt->evtPrc);
 					}
 
-				
+					/*
+					if(proc->currentBurst <= quantum) {
+						proc->preempted = false;
+					}*/
+					
+			
 
 					proc->running = false;
 					proc->blocked = false;
 					CALL_SCHEDULER = true;
 					tempTime = proc->timeRemaining ;
 					trans_output = "RUNNG -> READY";
-					tempTrans = 1; */
+					tempTrans = 1; 
+					
 					break;
 			}
 
@@ -885,19 +976,21 @@ void Simulation() {
 			} 
 			//cout << " Current burst is: " << proc->currentBurst << " and total CPU is " << totalCPU << endl;
 
-			cout << CURRENT_TIME << " " << proc->pid << " " <<proc->timeInPrevState<< ": "<< trans_output   ; //write code for time spent
-			if (tempTrans == 1 && prio_flag) {
-				cout << " cb=" << proc->currentBurst << " rem="<< tempTime << " prio=" << tempPRIO << endl; //" and static: " << proc->staticPRIO<< endl;
-			}  
-			else if (tempTrans ==1 ) {
-				cout << " cb=" << proc->currentBurst << " rem="<< tempTime << " prio="<<proc->staticPRIO << endl;
-			} 
-			else if (tempTrans == 2) {
-				cout << " ib=" << ioBurst << " rem="<< proc->timeRemaining << endl;
+			if (v_flag) {
+				cout << CURRENT_TIME << " " << proc->pid << " " <<proc->timeInPrevState<< ": "<< trans_output   ; //write code for time spent
+				if (tempTrans == 1 && prio_flag) {
+					cout << " cb=" << proc->currentBurst << " rem="<< tempTime << " prio=" << tempPRIO << endl; //" and static: " << proc->staticPRIO<< endl;
+				}  
+				else if (tempTrans ==1 ) {
+					cout << " cb=" << proc->currentBurst << " rem="<< tempTime << " prio="<<proc->staticPRIO << endl;
+				} 
+				else if (tempTrans == 2) {
+					cout << " ib=" << ioBurst << " rem="<< proc->timeRemaining << endl;
+				}
+				else {
+					cout << endl;
+				} 
 			}
-			else {
-				cout << endl;
-			} 
 			
 
 
@@ -905,6 +998,15 @@ void Simulation() {
 			if(CALL_SCHEDULER) {
 				//cout << "Scheduler called" << endl;
 
+
+				if (attemptPrio & checkRunningProcess()) {
+					//cout << "trying prio" << endl;
+					if(comparePRIO(proc)){
+						//create prempted event
+						tempEvt = new EVENT(proc->pid, CURRENT_TIME,3,2, proc);
+					}
+					attemptPrio = false;
+			 	}
 				if (get_next_event_time() == CURRENT_TIME) { 
 			 		continue;//process next event from Event queue
 				}	
@@ -926,6 +1028,8 @@ void Simulation() {
 			 			continue;
 			 		// create event to make this process runnable for same time.
 			 	}
+
+			 	
 			}
 
 			
@@ -984,7 +1088,7 @@ int main(int argc, char** argv) {
 	int k =1;
 	string getQuantum = "";
 
-	bool v_flag = false; //verbose output
+
 
 	while ((c = getopt (argc, argv, "vs:")) != -1) { 
 		switch(c) {
@@ -1040,9 +1144,25 @@ int main(int argc, char** argv) {
 					quantum = stoi(getQuantum);
 					schedName = "PRIO "+to_string(quantum);
 					prio_flag = true;
+					preprio = true;
 				}
+				else if (in == 'E') {
+					sched = new PREPRIO();
+					in2 = algoType[k];
+					while(in2 != '\0') {
+						getQuantum = getQuantum + in2;
+						k++;
+						in2 = algoType[k];
+					}
+					quantum = stoi(getQuantum);
+					schedName = "PREPRIO "+to_string(quantum);
+					prio_flag = true;
+					preprio = true;
+				}
+
+
 				else {
-					//sched = new FLOOK();  
+					  
 				}
 				break;
 			}
